@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Barcode Lookup - Canada Proud</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+  <style>
+    /* Popup Design */
+    .popup {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px 40px;
+      max-width: 90%;
+      width: 400px;
+      background: linear-gradient(to right, #f5f5f5, #f7f7f7);
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      z-index: 9999;
+      opacity: 0;
+      animation: popupAnimation 0.5s forwards;
+    }
+
+    @keyframes popupAnimation {
+      0% {
+        transform: translate(-50%, -50%) scale(0.8);
+        opacity: 0;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* For Canadian product pop-up */
+    .popup.canadian {
+      background-color: #e31c25; /* Red Background */
+      color: white;
+      border: 2px solid #fff;
+      box-shadow: 0 4px 20px rgba(227, 28, 37, 0.5);
+    }
+
+    .popup .flag {
+      font-size: 30px;
+      animation: bounce 1s infinite;
+    }
+
+    /* For non-Canadian product pop-up */
+    .popup.non-canadian {
+      background-color: #fff;
+      color: #333;
+      border: 2px solid #e31c25;
+      box-shadow: 0 4px 20px rgba(227, 28, 37, 0.3);
+    }
+
+    /* Flag Animation */
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .popup h2 {
+      font-size: 1.5rem;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .popup .message {
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .popup .cta {
+      font-size: 1.25rem;
+      font-weight: bold;
+    }
+
+    /* General styling */
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f9f9f9;
+    }
+  </style>
+</head>
+<body class="bg-white flex items-center justify-center min-h-screen">
+  <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-200">
+    <h1 class="text-3xl font-bold mb-4 text-center text-red-600">Canada Proud - Barcode Lookup</h1>
+
+    <form id="barcode-form" class="space-y-4">
+      <div class="relative">
+        <label for="barcode" class="block text-sm font-medium text-gray-700">Enter Barcode:</label>
+        <input type="text" id="barcode" name="barcode" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md pr-10">
+        <button type="button" id="clearButton" class="absolute right-2 top-8 text-gray-400 hover:text-gray-600">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </div>
+      <button type="submit" class="w-full bg-red-600 text-white py-2 rounded-md hover:bg-red-700">Search</button>
+      <button type="button" id="cameraButton" class="w-full mt-2 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+        </svg>
+        Scan Barcode
+      </button>
+    </form>
+
+    <div id="reader" class="mt-4 hidden"></div>
+
+    <div id="loader" class="mt-6 flex justify-center hidden">
+      <div class="loader"></div>
+      <span class="ml-2 text-gray-600">Fetching data...</span>
+    </div>
+
+    <div id="result" class="mt-6 p-4 bg-gray-100 rounded-md hidden"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('barcode-form');
+    const barcodeInput = document.getElementById('barcode');
+    const loader = document.getElementById('loader');
+    const resultDiv = document.getElementById('result');
+    const clearButton = document.getElementById('clearButton');
+    const cameraButton = document.getElementById('cameraButton');
+    const readerDiv = document.getElementById('reader');
+    let html5QrcodeScanner = null;
+
+    // Function to show the popup
+    function showPopup(message, isCanadian) {
+      const popup = document.createElement('div');
+      popup.classList.add('popup', isCanadian ? 'canadian' : 'non-canadian');
+
+      const flagIcon = isCanadian ? "🇨🇦" : "❌";
+      popup.innerHTML = `
+        <div class="flag">${flagIcon}</div>
+        <h2>${isCanadian ? "This product is proudly made in Canada!" : "This product is not from Canada."}</h2>
+        <div class="message">${message}</div>
+        <div class="cta">${isCanadian ? "You should buy it!" : "Support Canadian business!"}</div>
+      `;
+
+      document.body.appendChild(popup);
+
+      setTimeout(() => {
+        popup.style.opacity = 0;
+        setTimeout(() => popup.remove(), 1000);
+      }, 3000);
+    }
+
+    // Clear button functionality
+    clearButton.addEventListener('click', () => {
+      barcodeInput.value = '';
+      resultDiv.classList.add('hidden');
+    });
+
+    // Camera functionality
+    cameraButton.addEventListener('click', () => {
+      readerDiv.classList.remove('hidden');
+      if (html5QrcodeScanner === null) {
+        html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+          fps: 10,
+          qrbox: 250
+        });
+        
+        html5QrcodeScanner.render((decodedText) => {
+          barcodeInput.value = decodedText;
+          html5QrcodeScanner.clear();
+          readerDiv.classList.add('hidden');
+          form.dispatchEvent(new Event('submit'));
+        }, (error) => {
+          console.warn(`Code scan error = ${error}`);
+        });
+      } else {
+        readerDiv.classList.remove('hidden');
+      }
+    });
+
+    // Form Submission Logic
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const barcode = barcodeInput.value.trim();
+      if (!barcode) {
+        alert('Please enter a barcode.');
+        return;
+      }
+
+      loader.classList.remove('hidden');
+      resultDiv.classList.add('hidden');
+      try {
+        const response = await fetch(`http://localhost:3000/api/product/${barcode}`);
+        const data = await response.json();
+        loader.classList.add('hidden');
+        if (response.ok) {
+          resultDiv.innerHTML = `<h2 class="text-lg font-bold">Product Details</h2>
+            <p><strong>Name:</strong> ${data.product_name}</p>
+            <p><strong>Description:</strong> ${data.description}</p>
+            <p><strong>Price:</strong> $${data.price}</p>
+            <p><strong>Country of Origin:</strong> ${data.country_of_origin}</p>`;
+
+          if (data.country_of_origin.toLowerCase() === 'canada') {
+            showPopup("This is a great Canadian product!", true);
+          } else {
+            showPopup("Support local Canadian businesses!", false);
+          }
+
+          resultDiv.classList.remove('hidden');
+        } else {
+          resultDiv.innerHTML = `<p class="text-red-600">${data.message}</p>`;
+          resultDiv.classList.remove('hidden');
+        }
+      } catch (error) {
+        console.error('Error fetching product:', error);
+        loader.classList.add('hidden');
+        resultDiv.innerHTML = `<p class="text-red-600">An error occurred. Please try again later.</p>`;
+        resultDiv.classList.remove('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
